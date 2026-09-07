@@ -1,0 +1,258 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application user account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "operator"] }
+      },
+      "required": ["id", "username", "role"]
+    },
+    "MYAgent": {
+      "title": "MY Agent",
+      "description": "Agent based in Malaysia",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "default_bkash_rate": { "type": "number" },
+        "default_bank_rate": { "type": "number" },
+        "initial_balance": { "type": "number" },
+        "initial_balance_date": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "BDAgent": {
+      "title": "BD Agent",
+      "description": "Agent based in Bangladesh",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "initial_balance": { "type": "number" },
+        "initial_balance_date": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Money transfer order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "my_agent_id": { "type": "number" },
+        "bd_agent_id": { "type": "number" },
+        "type": { "type": "string", "enum": ["bkash", "bank", "nagad"] },
+        "amount_bdt": { "type": "number" },
+        "rate": { "type": "number" },
+        "amount_myr": { "type": "number" },
+        "charge": { "type": "number" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "remark": { "type": "string" }
+      },
+      "required": ["id", "my_agent_id", "bd_agent_id", "amount_bdt", "rate", "amount_myr", "date"]
+    },
+    "CollectionMethod": {
+      "title": "Collection Method",
+      "description": "Bank or mobile banking method",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["MY", "BD"] },
+        "initial_balance": { "type": "number" },
+        "initial_balance_date": { "type": "string" },
+        "subItems": {
+          "type": "array",
+          "items": { "$ref": "#/entities/CollectionMethodSubItem" }
+        }
+      },
+      "required": ["id", "name", "type"]
+    },
+    "CollectionMethodSubItem": {
+      "title": "Collection Method Sub Item",
+      "description": "Sub-account for a collection method",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "initial_balance": { "type": "number" },
+        "initial_balance_date": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "MYPayment": {
+      "title": "MY Payment",
+      "description": "Payment received from MY agent",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "my_agent_id": { "type": "number" },
+        "amount_myr": { "type": "number" },
+        "payment_method": { "type": "string" },
+        "sub_method": { "type": "string" },
+        "date": { "type": "string" },
+        "note": { "type": "string" },
+        "order_ids": { "type": "array", "items": { "type": "number" } }
+      },
+      "required": ["id", "my_agent_id", "amount_myr", "date"]
+    },
+    "BDPayment": {
+      "title": "BD Payment",
+      "description": "Payment sent to BD agent",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "bd_agent_id": { "type": "number" },
+        "amount_bdt": { "type": "number" },
+        "payment_method": { "type": "string" },
+        "sub_method": { "type": "string" },
+        "date": { "type": "string" },
+        "note": { "type": "string" },
+        "order_ids": { "type": "array", "items": { "type": "number" } }
+      },
+      "required": ["id", "bd_agent_id", "amount_bdt", "date"]
+    },
+    "Conversion": {
+      "title": "Conversion",
+      "description": "Currency conversion for remittance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "amount_myr": { "type": "number" },
+        "rate": { "type": "number" },
+        "amount_bdt": { "type": "number" },
+        "bank_charges": { "type": "number" },
+        "date": { "type": "string" },
+        "note": { "type": "string" },
+        "commission_enabled": { "type": "boolean" },
+        "commission_amount": { "type": "number" },
+        "total_bd_received": { "type": "number" },
+        "pay_to_bd_agent_id": { "type": "number" }
+      },
+      "required": ["id", "amount_myr", "rate", "amount_bdt", "date"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Operational expense",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "amount_myr": { "type": "number" },
+        "currency": { "type": "string", "enum": ["MYR", "BDT"] },
+        "category": { "type": "string" },
+        "date": { "type": "string" },
+        "note": { "type": "string" },
+        "order_id": { "type": "number" }
+      },
+      "required": ["id", "amount_myr", "category", "date"]
+    },
+    "RateHistory": {
+      "title": "Rate History",
+      "description": "History of currency rates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "rate": { "type": "number" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "rate", "date"]
+    },
+    "Withdrawal": {
+      "title": "Withdrawal",
+      "description": "Cash withdrawal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "agent_id": { "type": "number" },
+        "agent_type": { "type": "string", "enum": ["MY", "BD"] },
+        "method_name": { "type": "string" },
+        "sub_method_name": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "note": { "type": "string" }
+      },
+      "required": ["id", "amount", "date"]
+    },
+    "Deposit": {
+      "title": "Deposit",
+      "description": "Cash deposit",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "agent_id": { "type": "number" },
+        "agent_type": { "type": "string", "enum": ["MY", "BD"] },
+        "method_name": { "type": "string" },
+        "sub_method_name": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "note": { "type": "string" }
+      },
+      "required": ["id", "amount", "date"]
+    },
+    "Loan": {
+      "title": "Loan",
+      "description": "Person or entity name and initial details of loan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "added_date": { "type": "string" },
+        "modify_date": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "LoanTransaction": {
+      "title": "Loan Transaction",
+      "description": "Individual transaction entry in a loan ledger",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "loanId": { "type": "number" },
+        "date": { "type": "string" },
+        "description": { "type": "string" },
+        "drAmount": { "type": "string" },
+        "crAmount": { "type": "string" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "added_date": { "type": "string" },
+        "modify_date": { "type": "string" }
+      },
+      "required": ["id", "loanId", "date"]
+    },
+    "GlobalSettings": {
+      "title": "Global Settings",
+      "description": "Global application settings",
+      "type": "object",
+      "properties": {
+        "defaultRate": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "Users collection" },
+    "my_agents": { "schema": "MYAgent", "description": "Malaysia agents collection" },
+    "bd_agents": { "schema": "BDAgent", "description": "Bangladesh agents collection" },
+    "orders": { "schema": "Order", "description": "Orders collection" },
+    "collection_methods": { "schema": "CollectionMethod", "description": "Collection methods collection" },
+    "my_payments": { "schema": "MYPayment", "description": "MY payments collection" },
+    "bd_payments": { "schema": "BDPayment", "description": "BD payments collection" },
+    "conversions": { "schema": "Conversion", "description": "Conversions collection" },
+    "expenses": { "schema": "Expense", "description": "Expenses collection" },
+    "rate_history": { "schema": "RateHistory", "description": "Rate history collection" },
+    "withdrawals": { "schema": "Withdrawal", "description": "Withdrawals collection" },
+    "deposits": { "schema": "Deposit", "description": "Deposits collection" },
+    "loans": { "schema": "Loan", "description": "Loans collection" },
+    "loan_transactions": { "schema": "LoanTransaction", "description": "Loan transactions ledger collection" },
+    "settings": { "schema": "GlobalSettings", "description": "Settings collection" }
+  }
+}

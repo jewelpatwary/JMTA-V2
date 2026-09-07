@@ -1,0 +1,8 @@
+{
+  "name": "Juel Money Transfer Apps",
+  "description": "A comprehensive system for managing MYR to BDT money transfers, agent balances, and profit tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

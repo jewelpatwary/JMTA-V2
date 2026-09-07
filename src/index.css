@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Font Families */
+.font-inter { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif !important; }
+.font-roboto { font-family: 'Roboto', ui-sans-serif, system-ui, sans-serif !important; }
+.font-poppins { font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif !important; }
+.font-jakarta { font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif !important; }
+.font-outfit { font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif !important; }
+.font-opensans { font-family: 'Open Sans', ui-sans-serif, system-ui, sans-serif !important; }
+.font-lato { font-family: 'Lato', ui-sans-serif, system-ui, sans-serif !important; }
+.font-montserrat { font-family: 'Montserrat', ui-sans-serif, system-ui, sans-serif !important; }
+.font-merriweather { font-family: 'Merriweather', Georgia, serif !important; }
+.font-playfair { font-family: 'Playfair Display', Georgia, serif !important; }
+.font-jetbrains { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+.font-courier { font-family: 'Courier Prime', Courier, monospace !important; }
+.font-serif { font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif !important; }
+.font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; }
+.font-sans { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif !important; }
+
