@@ -190,7 +190,10 @@ const SearchableSelect = ({
   onChange, 
   placeholder = "Select an option",
   required,
-  action
+  action,
+  isOpen: controlledIsOpen,
+  onOpenChange,
+  shortcutBadge
 }: { 
   label?: React.ReactNode; 
   value: string | number; 
@@ -199,14 +202,56 @@ const SearchableSelect = ({
   placeholder?: string;
   required?: boolean;
   action?: React.ReactNode;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  shortcutBadge?: string;
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+
+  const isControlled = controlledIsOpen !== undefined;
+  const isOpen = isControlled ? controlledIsOpen : internalIsOpen;
+
+  const setIsOpen = (open: boolean) => {
+    if (isControlled) {
+      onOpenChange?.(open);
+    } else {
+      setInternalIsOpen(open);
+    }
+    if (!open) {
+      setSearchTerm('');
+      setHighlightedIndex(0);
+    }
+  };
   
   const selectedOption = options.find(opt => opt.value.toString() === value.toString());
   const filteredOptions = options.filter(opt => 
     opt.label.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [searchTerm, isOpen]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev => (filteredOptions.length > 0 ? (prev + 1) % filteredOptions.length : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev => (filteredOptions.length > 0 ? (prev - 1 + filteredOptions.length) % filteredOptions.length : 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredOptions.length > 0 && filteredOptions[highlightedIndex]) {
+        onChange(filteredOptions[highlightedIndex].value.toString());
+        setIsOpen(false);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsOpen(false);
+    }
+  };
 
   return (
     <div className="space-y-1">
@@ -223,22 +268,46 @@ const SearchableSelect = ({
       <div 
         onClick={() => setIsOpen(true)}
         className={cn(
-          "w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer flex items-center justify-between text-xs dark:text-white min-h-[32px]",
+          "w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer flex items-center justify-between text-xs dark:text-white min-h-[32px] hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors",
           !selectedOption && "text-slate-400"
         )}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
-        <ChevronDown size={12} className="text-slate-400 flex-shrink-0" />
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {shortcutBadge && (
+            <kbd className="hidden sm:inline-block px-1 py-0.5 text-[9px] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded font-mono font-semibold">
+              {shortcutBadge}
+            </kbd>
+          )}
+          <ChevronDown size={12} className="text-slate-400" />
+        </div>
       </div>
 
       {isOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div 
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+            onClick={() => setIsOpen(false)}
+          >
             <div 
-              className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]"
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-150"
             >
               <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <h3 className="font-bold text-sm dark:text-white">{label || "Select Option"}</h3>
-                <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-sm dark:text-white">
+                    {typeof label === 'string' ? label : "Select Option"}
+                  </h3>
+                  {shortcutBadge && (
+                    <span className="px-1.5 py-0.5 text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-mono rounded font-semibold">
+                      {shortcutBadge}
+                    </span>
+                  )}
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setIsOpen(false)} 
+                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                >
                   <Plus className="rotate-45 w-5 h-5 text-slate-500" />
                 </button>
               </div>
@@ -252,31 +321,43 @@ const SearchableSelect = ({
                     placeholder="Search..." 
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-sm outline-none dark:text-white"
+                    onKeyDown={handleKeyDown}
+                    className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-sm outline-none dark:text-white focus:ring-2 focus:ring-indigo-500"
                   />
+                </div>
+                <div className="flex justify-between items-center mt-2 px-1 text-[11px] text-slate-400">
+                  <span>Use &uarr; &darr; to navigate, Enter to select</span>
+                  <span>ESC to close</span>
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-2">
-                {filteredOptions.length > 0 ? filteredOptions.map((opt, idx) => (
-                  <div 
-                    key={`${opt.value}-${idx}`}
-                    onClick={() => {
-                      onChange(opt.value.toString());
-                      setIsOpen(false);
-                      setSearchTerm('');
-                    }}
-                    className={cn(
-                      "p-3 rounded-xl cursor-pointer transition-all flex items-center justify-between group",
-                      value.toString() === opt.value.toString() 
-                        ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-bold" 
-                        : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                    )}
-                  >
-                    <span className="text-sm">{opt.label}</span>
-                    {value.toString() === opt.value.toString() && <Check size={16} />}
-                  </div>
-                )) : (
+                {filteredOptions.length > 0 ? filteredOptions.map((opt, idx) => {
+                  const isSelected = value.toString() === opt.value.toString();
+                  const isHighlighted = idx === highlightedIndex;
+                  return (
+                    <div 
+                      key={`${opt.value}-${idx}`}
+                      onMouseEnter={() => setHighlightedIndex(idx)}
+                      onClick={() => {
+                        onChange(opt.value.toString());
+                        setIsOpen(false);
+                        setSearchTerm('');
+                      }}
+                      className={cn(
+                        "p-3 rounded-xl cursor-pointer transition-all flex items-center justify-between group",
+                        isSelected 
+                          ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-bold" 
+                          : isHighlighted
+                            ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300"
+                            : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                      )}
+                    >
+                      <span className="text-sm">{opt.label}</span>
+                      {isSelected && <Check size={16} />}
+                    </div>
+                  );
+                }) : (
                   <div className="py-8 text-center text-slate-500 text-sm">No results found</div>
                 )}
               </div>
@@ -1675,7 +1756,7 @@ function ViewLedgerModal({
     if (col === 'Balance') {
       if (data.length === 0) return '';
       const lastRow = data[data.length - 1];
-      const balance = Object.values(lastRow)[index];
+      const balance = typeof lastRow?.balance === 'number' ? lastRow.balance : Object.values(lastRow)[index];
       return typeof balance === 'number' ? balance : '';
     }
     let sum = 0;
@@ -3949,7 +4030,7 @@ function MYAgents({
     const tableData = filteredAgents.map(a => [
       a.id,
       a.name,
-      ((a.total_payments_myr - a.total_orders_myr) + (Number(a.initial_balance) || 0)).toLocaleString(),
+      (a.outstanding ?? ((a.total_payments_myr - a.total_orders_myr) + (Number(a.initial_balance) || 0))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       a.initial_balance_date
     ]);
 
@@ -3968,7 +4049,7 @@ function MYAgents({
     const tableData = filteredAgents.map(a => ({
       'ID': a.id,
       'Name': a.name,
-      'Balance (RM)': (a.total_payments_myr - a.total_orders_myr) + (Number(a.initial_balance) || 0),
+      'Balance (RM)': a.outstanding ?? ((a.total_payments_myr - a.total_orders_myr) + (Number(a.initial_balance) || 0)),
       'Date': a.initial_balance_date
     }));
 
@@ -3982,7 +4063,7 @@ function MYAgents({
       const csv = Papa.unparse(filteredAgents.map(a => ({
           'ID': a.id,
           'Name': a.name,
-          'Balance (RM)': (a.total_payments_myr - a.total_orders_myr) + (Number(a.initial_balance) || 0),
+          'Balance (RM)': a.outstanding ?? ((a.total_payments_myr - a.total_orders_myr) + (Number(a.initial_balance) || 0)),
           'Date': a.initial_balance_date
       })));
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -4030,7 +4111,7 @@ function MYAgents({
                     {agent.name}
                   </td>
                   <td className="px-2 py-2 text-xs font-bold text-slate-900 dark:text-white border-r border-slate-200 dark:border-slate-700">
-                    {formatCurrency((agent.total_payments_myr - agent.total_orders_myr) + (Number(agent.initial_balance) || 0))}
+                    {formatCurrency(agent.outstanding ?? ((agent.total_payments_myr - agent.total_orders_myr) + (Number(agent.initial_balance) || 0)))}
                   </td>
                   <td className="px-2 py-2 text-right">
                     <div className="flex items-center justify-end gap-1.5">
@@ -4078,7 +4159,7 @@ function MYAgents({
                 <tr>
                   <td className="px-2 py-2 text-xs text-slate-900 dark:text-white text-right border-r border-slate-200 dark:border-slate-700">TOTAL:</td>
                   <td className="px-2 py-2 text-xs text-slate-900 dark:text-white border-r border-slate-200 dark:border-slate-700">
-                    {formatCurrency(filteredAgents.reduce((sum, agent) => sum + ((agent.total_payments_myr - agent.total_orders_myr) + (Number(agent.initial_balance) || 0)), 0))}
+                    {formatCurrency(filteredAgents.reduce((sum, agent) => sum + (agent.outstanding ?? ((agent.total_payments_myr - agent.total_orders_myr) + (Number(agent.initial_balance) || 0))), 0))}
                   </td>
                   <td className="px-2 py-2"></td>
                 </tr>
@@ -4281,11 +4362,14 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
     ? [...orders].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
     : new Date().toISOString().split('T')[0];
 
+  const [isMYAgentSelectOpen, setIsMYAgentSelectOpen] = useState(false);
+
   const handleOpenNewOrder = useCallback(() => {
     const savedDate = localStorage.getItem('last_order_date') || lastOrderDate;
     const savedBDAgent = localStorage.getItem('last_bd_agent_id') || '';
     const initialRate = getActiveRate(savedDate, 'bkash');
     setEditingOrder(null);
+    setIsMYAgentSelectOpen(false);
     setFormData({
       my_agent_id: '',
       bd_agent_id: savedBDAgent,
@@ -4300,21 +4384,30 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
     setShowAdd(true);
   }, [lastOrderDate, defaultMobileRate, defaultBankRate, rateHistory, myAgents]);
 
-  // F2 Shortcut key to open New Order
+  // Submodal for creating a new agent directly inside Create New Order
+  const [showCreateAgentModal, setShowCreateAgentModal] = useState<'my' | 'bd' | null>(null);
+  const [newAgentType, setNewAgentType] = useState<'my' | 'bd'>('my');
+
+  // F2 Shortcut key:
+  // - First F2 press (when form is closed): opens Create New Order form only
+  // - Second F2 press (when form is open): opens / toggles the Malaysia Agent "select an option" dialog
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') {
         e.preventDefault();
-        handleOpenNewOrder();
+        e.stopPropagation();
+        if (showCreateAgentModal) return;
+
+        if (!showAdd) {
+          handleOpenNewOrder();
+        } else {
+          setIsMYAgentSelectOpen(prev => !prev);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleOpenNewOrder]);
-
-  // Submodal for creating a new agent directly inside Create New Order
-  const [showCreateAgentModal, setShowCreateAgentModal] = useState<'my' | 'bd' | null>(null);
-  const [newAgentType, setNewAgentType] = useState<'my' | 'bd'>('my');
+  }, [showAdd, showCreateAgentModal, handleOpenNewOrder]);
   const [newAgentFormData, setNewAgentFormData] = useState({
     name: '',
     initial_balance: '0',
@@ -4783,11 +4876,9 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{editingOrder ? 'Edit Order' : 'Create New Order'}</h2>
-                  {!editingOrder && (
-                    <span className="px-2 py-0.5 text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-mono rounded-md font-semibold">
-                      F2
-                    </span>
-                  )}
+                  <span className="px-2 py-0.5 text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-mono rounded-md font-semibold flex items-center gap-1">
+                    Press <kbd className="font-bold">F2</kbd> to Select MY Agent
+                  </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Enter transfer details or quickly register a new agent
@@ -4807,7 +4898,7 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
                 </Button>
                 <button 
                   type="button"
-                  onClick={() => { setShowAdd(false); setEditingOrder(null); }} 
+                  onClick={() => { setShowAdd(false); setEditingOrder(null); setIsMYAgentSelectOpen(false); }} 
                   className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors"
                 >
                   <Plus className="rotate-45 w-6 h-6 text-slate-600 dark:text-slate-400" />
@@ -4821,15 +4912,20 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
                     label="Malaysia Agent" 
                     value={formData.my_agent_id || ''}
                     options={myAgents.map(a => ({value: a.id, label: a.name}))} 
+                    isOpen={isMYAgentSelectOpen}
+                    onOpenChange={setIsMYAgentSelectOpen}
+                    shortcutBadge="F2"
                     action={
-                      <button 
-                        type="button" 
-                        onClick={() => handleOpenCreateAgent('my')}
-                        className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-0.5 hover:underline"
-                        title="Create new Malaysia Agent"
-                      >
-                        <Plus size={12} /> New MY Agent
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          type="button" 
+                          onClick={() => handleOpenCreateAgent('my')}
+                          className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-0.5 hover:underline"
+                          title="Create new Malaysia Agent"
+                        >
+                          <Plus size={12} /> New MY Agent
+                        </button>
+                      </div>
                     }
                     onChange={val => {
                       const rate = getActiveRate(formData.date || lastOrderDate, formData.type, val);
@@ -4841,6 +4937,7 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
                          }
                          return { ...prev, my_agent_id: val, rate: newRate };
                       });
+                      setIsMYAgentSelectOpen(false);
                     }}
                     required
                   />
@@ -4945,7 +5042,7 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
                   onChange={e => setFormData(prev => ({ ...prev, remark: e.target.value }))} 
                 />
                 <div className="flex gap-2 pt-4 border-t border-slate-100 dark:border-slate-700 mt-4">
-                  <Button variant="outline" className="flex-1" onClick={() => { setShowAdd(false); setEditingOrder(null); }} type="button">Cancel</Button>
+                  <Button variant="outline" className="flex-1" onClick={() => { setShowAdd(false); setEditingOrder(null); setIsMYAgentSelectOpen(false); }} type="button">Cancel</Button>
                   <Button type="submit" className="flex-1">{editingOrder ? 'Update Order' : 'Confirm Order'}</Button>
                 </div>
               </form>
@@ -5205,13 +5302,13 @@ function BDAgents({
     const tableData = filteredAgents.map(a => [
       a.id,
       a.name,
-      a.initial_balance.toLocaleString(),
+      (a.outstanding ?? (a.total_payments_bdt - a.total_orders_bdt + (Number(a.initial_balance) || 0))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       a.initial_balance_date
     ]);
 
     autoTable(doc, {
       startY: 40,
-      head: [['ID', 'Name', 'Initial Balance', 'Date']],
+      head: [['ID', 'Name', 'Balance (BDT)', 'Date']],
       body: tableData,
       theme: 'striped',
       headStyles: { fillColor: [15, 23, 42] }
@@ -5224,7 +5321,7 @@ function BDAgents({
     const tableData = filteredAgents.map(a => ({
       'ID': a.id,
       'Name': a.name,
-      'Initial Balance': a.initial_balance,
+      'Balance (BDT)': a.outstanding ?? (a.total_payments_bdt - a.total_orders_bdt + (Number(a.initial_balance) || 0)),
       'Date': a.initial_balance_date
     }));
 
@@ -5238,7 +5335,7 @@ function BDAgents({
       const csv = Papa.unparse(filteredAgents.map(a => ({
           'ID': a.id,
           'Name': a.name,
-          'Initial Balance': a.initial_balance,
+          'Balance (BDT)': a.outstanding ?? (a.total_payments_bdt - a.total_orders_bdt + (Number(a.initial_balance) || 0)),
           'Date': a.initial_balance_date
       })));
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -5286,7 +5383,7 @@ function BDAgents({
                     {agent.name}
                   </td>
                   <td className="px-2 py-2 text-xs font-bold text-slate-900 dark:text-white border-r border-slate-200 dark:border-slate-700">
-                    {(agent.total_payments_bdt - agent.total_orders_bdt + (Number(agent.initial_balance) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} BDT
+                    {(agent.outstanding ?? (agent.total_payments_bdt - agent.total_orders_bdt + (Number(agent.initial_balance) || 0))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} BDT
                   </td>
                   <td className="px-2 py-2 text-right">
                     <div className="flex items-center justify-end gap-1.5">
@@ -5334,7 +5431,7 @@ function BDAgents({
                 <tr>
                   <td className="px-2 py-2 text-xs text-slate-900 dark:text-white text-right border-r border-slate-200 dark:border-slate-700">TOTAL:</td>
                   <td className="px-2 py-2 text-xs text-slate-900 dark:text-white border-r border-slate-200 dark:border-slate-700">
-                    {filteredAgents.reduce((sum, agent) => sum + (agent.total_payments_bdt - agent.total_orders_bdt + (Number(agent.initial_balance) || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} BDT
+                    {filteredAgents.reduce((sum, agent) => sum + (agent.outstanding ?? (agent.total_payments_bdt - agent.total_orders_bdt + (Number(agent.initial_balance) || 0))), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} BDT
                   </td>
                   <td className="px-2 py-2"></td>
                 </tr>

@@ -38,14 +38,14 @@ const calculateOutstanding = (type: 'MY' | 'BD', agent: any, orders: any[], paym
   if (type === 'MY') {
     const totalOrders = orders.filter(o => Number(o.my_agent_id) === agentId).reduce((sum, o) => sum + Number(o.amount_myr), 0);
     const totalPayments = payments.filter(p => Number(p.my_agent_id) === agentId).reduce((sum, p) => sum + Number(p.amount_myr), 0);
-    return initialBalance + totalPayments - totalOrders;
+    return Math.round((initialBalance + totalPayments - totalOrders) * 100) / 100;
   } else {
     const totalOrders = orders.filter(o => Number(o.bd_agent_id) === agentId).reduce((sum, o) => sum + Number(o.amount_bdt), 0);
     const totalCharges = orders.filter(o => Number(o.bd_agent_id) === agentId).reduce((sum, o) => sum + (Number(o.charge) || 0), 0);
     const totalPayments = payments.filter(p => Number(p.bd_agent_id) === agentId).reduce((sum, p) => {
       const amt = Number(p.amount_bdt) || 0;
       const chg = Number(p.charge) || 0;
-      return sum + amt - (amt < 0 ? chg : 0);
+      return sum + amt - chg;
     }, 0);
     const totalConversions = conversions
       .filter(c => Boolean(c.pay_to_bd_agent_id) && Number(c.pay_to_bd_agent_id) === agentId)
@@ -56,7 +56,7 @@ const calculateOutstanding = (type: 'MY' | 'BD', agent: any, orders: any[], paym
         return sum + total;
       }, 0);
     
-    return initialBalance + totalPayments + totalConversions - (totalOrders + totalCharges);
+    return Math.round((initialBalance + totalPayments + totalConversions - (totalOrders + totalCharges)) * 100) / 100;
   }
 };
 
@@ -255,7 +255,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const bdId = Number(p.bd_agent_id);
         const amountBdt = Number(p.amount_bdt) || 0;
         const chargeBdt = Number(p.charge) || 0;
-        const netAmount = amountBdt < 0 ? amountBdt - chargeBdt : amountBdt;
+        const netAmount = amountBdt - chargeBdt;
         if (bdId) {
           paymentsByBdAgent.set(bdId, (paymentsByBdAgent.get(bdId) || 0) + netAmount);
         }
@@ -276,7 +276,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const totalOrdersMyr = ordersByMyAgent.get(agentId) || 0;
         const totalPaymentsMyr = paymentsByMyAgent.get(agentId) || 0;
         const initialBalance = Number(agent.initial_balance) || 0;
-        const outstanding = initialBalance + totalPaymentsMyr - totalOrdersMyr;
+        const outstanding = Math.round((initialBalance + totalPaymentsMyr - totalOrdersMyr) * 100) / 100;
 
         return {
           ...agent,
@@ -294,7 +294,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const totalPaymentsBdt = paymentsByBdAgent.get(agentId) || 0;
         const conversionTotal = conversionsByBdAgent.get(agentId) || 0;
         const initialBalance = Number(agent.initial_balance) || 0;
-        const outstanding = initialBalance + totalPaymentsBdt + conversionTotal - (totalOrdersBdt + totalCharges);
+        const outstanding = Math.round((initialBalance + totalPaymentsBdt + conversionTotal - (totalOrdersBdt + totalCharges)) * 100) / 100;
 
         return {
           ...agent,
@@ -2312,13 +2312,13 @@ export const store = {
 
       if (myAgentIdNum) {
         isMyAgent = true;
-        const agent = myAgents.find(a => a.id === myAgentIdNum);
+        const agent = myAgents.find(a => Number(a.id) === myAgentIdNum);
         if (agent) {
           initialDate = agent.initial_balance_date || '';
           let currentBalance = Number(agent.initial_balance) || 0;
           
-          const agentOrders = orders.filter(o => o.my_agent_id === agent.id);
-          const agentPayments = myPayments.filter(p => p.my_agent_id === agent.id);
+          const agentOrders = orders.filter(o => Number(o.my_agent_id) === Number(agent.id));
+          const agentPayments = myPayments.filter(p => Number(p.my_agent_id) === Number(agent.id));
           
           let allTransactions = [
             ...agentOrders.map(o => ({ 
@@ -2348,7 +2348,7 @@ export const store = {
           if (start_date) {
             const previousTransactions = allTransactions.filter(t => t.date < start_date);
             previousTransactions.forEach(t => {
-              currentBalance = currentBalance + t.credit - t.debit;
+              currentBalance = Math.round((currentBalance + t.credit - t.debit) * 100) / 100;
             });
             ledgerData = allTransactions.filter(t => t.date >= start_date && (!end_date || t.date <= end_date));
           } else {
@@ -2367,64 +2367,73 @@ export const store = {
           const agentPayments = bdPayments.filter(p => Number(p.bd_agent_id) === Number(agent.id));
           const agentConversions = conversions.filter(c => Boolean(c.pay_to_bd_agent_id) && Number(c.pay_to_bd_agent_id) === Number(agent.id));
           
-          const orderTransactions = agentOrders.map(o => ({
-            id: o.id,
-            date: o.date,
-            desc: o.type === 'bank' ? `Bank Order${o.remark ? ' - ' + o.remark : ''}` : `Order${o.type && o.type !== 'bkash' ? ` (${o.type})` : ''}${o.remark ? ' - ' + o.remark : ''}`,
-            debit: Number(o.amount_bdt),
-            credit: 0
-          }));
-
-          const chargeTransactions = agentOrders
-            .filter(o => (Number(o.charge) || 0) > 0)
-            .map(o => ({
-              id: Number(o.id) + 0.5,
+          const orderTransactions = agentOrders.map(o => {
+            const amt = Number(o.amount_bdt) || 0;
+            const chg = Number(o.charge) || 0;
+            const totalDebit = amt + chg;
+            const desc = o.type === 'bank' 
+              ? `Bank Order${chg > 0 ? ` (incl. Charge: ${chg})` : ''}${o.remark ? ' - ' + o.remark : ''}` 
+              : `Order${o.type && o.type !== 'bkash' ? ` (${o.type})` : ''}${chg > 0 ? ` (incl. Charge: ${chg})` : ''}${o.remark ? ' - ' + o.remark : ''}`;
+            return {
+              id: o.id,
               date: o.date,
-              desc: o.type === 'bank' ? `Charge BD (Bank Order)${o.remark ? ' - ' + o.remark : ''}` : `Charge BD${o.remark ? ' - ' + o.remark : ''}`,
-              debit: Number(o.charge),
+              desc,
+              debit: totalDebit,
               credit: 0
-            }));
+            };
+          });
 
-          const paymentTransactions = agentPayments.flatMap(p => {
+          const paymentTransactions = agentPayments.map(p => {
             const amt = Number(p.amount_bdt) || 0;
             const chg = Number(p.charge) || 0;
             const isNegative = amt < 0;
-            const mainTx = {
+            const totalDebit = isNegative ? (Math.abs(amt) + chg) : chg;
+            const totalCredit = !isNegative ? amt : 0;
+            let desc = `Payment (${p.payment_method}${p.sub_method ? ' - ' + p.sub_method : ''})${p.note ? ' - ' + p.note : ''}`;
+            if (chg > 0 && !desc.includes('Charge')) {
+              desc += ` (incl. Charge: ${chg})`;
+            }
+            return {
               id: p.id,
               date: p.date,
-              desc: `Payment (${p.payment_method}${p.sub_method ? ' - ' + p.sub_method : ''})${p.note ? ' - ' + p.note : ''}`,
-              debit: isNegative ? Math.abs(amt) : 0,
-              credit: !isNegative ? amt : 0
+              desc,
+              debit: totalDebit,
+              credit: totalCredit
             };
-            if (isNegative && chg > 0) {
-              const chargeTx = {
-                id: Number(p.id) + 0.6,
-                date: p.date,
-                desc: `Transfer Charge (${p.payment_method}${p.sub_method ? ' - ' + p.sub_method : ''})`,
-                debit: chg,
-                credit: 0
+          });
+
+          const conversionTransactions = agentConversions.flatMap(c => {
+            const bdt = Number(c.amount_bdt) || 0;
+            const comm = c.commission_enabled ? (c.commission_amount ? Number(c.commission_amount) : bdt * 0.025) : 0;
+            const totalReceived = Number(c.total_bd_received) || (bdt + comm);
+            const actualComm = c.commission_enabled ? (totalReceived - bdt > 0 ? totalReceived - bdt : comm) : 0;
+            const baseTx = {
+              id: c.id,
+              date: c.date,
+              desc: `Conversion Remittance${c.note ? ' - ' + c.note : ''}`,
+              debit: 0,
+              credit: bdt
+            };
+            if (actualComm > 0) {
+              const pct = c.commission_amount && bdt > 0 
+                ? ((actualComm / bdt) * 100).toFixed(1).replace('.0', '') + '%' 
+                : '2.5%';
+              const commTx = {
+                id: Number(c.id) + 0.5,
+                date: c.date,
+                desc: `Conversion Commission (${pct})`,
+                debit: 0,
+                credit: actualComm
               };
-              return [mainTx, chargeTx];
+              return [baseTx, commTx];
             }
-            return [mainTx];
+            return [baseTx];
           });
 
           let allTransactions = [
             ...orderTransactions,
-            ...chargeTransactions,
             ...paymentTransactions,
-            ...agentConversions.map(c => {
-              const bdt = Number(c.amount_bdt) || 0;
-              const comm = c.commission_enabled ? (c.commission_amount ? Number(c.commission_amount) : bdt * 0.025) : 0;
-              const total = Number(c.total_bd_received) || (bdt + comm);
-              return { 
-                id: c.id,
-                date: c.date, 
-                desc: `Conversion Remittance${c.commission_enabled ? ' (incl. 2.5% Commission)' : ''}`, 
-                debit: 0, 
-                credit: total
-              };
-            })
+            ...conversionTransactions
           ].sort((a, b) => {
             const dateComparison = String(a.date || '').localeCompare(String(b.date || ''));
             if (dateComparison !== 0) return dateComparison;
@@ -2434,7 +2443,7 @@ export const store = {
           if (start_date) {
             const previousTransactions = allTransactions.filter(t => t.date < start_date);
             previousTransactions.forEach(t => {
-              currentBalance = currentBalance + t.credit - t.debit;
+              currentBalance = Math.round((currentBalance + t.credit - t.debit) * 100) / 100;
             });
             ledgerData = allTransactions.filter(t => t.date >= start_date && (!end_date || t.date <= end_date));
           } else {
@@ -2473,7 +2482,7 @@ export const store = {
       }
 
       ledgerData.forEach(item => {
-          balance = balance + item.credit - item.debit;
+          balance = Math.round((balance + item.credit - item.debit) * 100) / 100;
           const row: any = {
               date: item.date,
               desc: item.desc,
