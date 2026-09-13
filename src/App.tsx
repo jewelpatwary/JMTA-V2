@@ -1608,6 +1608,8 @@ function ViewLedgerModal({
   const [reportData, setReportData] = useState<any>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen && agent) fetchLedger();
@@ -1631,8 +1633,12 @@ function ViewLedgerModal({
 
   const exportToPDF = () => {
     if (!reportData || !reportData.data || !reportData.columns) return;
-    const doc = new jsPDF();
     const { data, columns } = reportData;
+    const doc = new jsPDF({
+      orientation: columns.length > 5 ? 'landscape' : 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
     
     const columnTotals = columns.map((col: string, index: number) => {
       if (index === 0) return 'TOTAL';
@@ -1640,7 +1646,7 @@ function ViewLedgerModal({
       if (col === 'Balance') {
         if (data.length === 0) return '';
         const lastRow = data[data.length - 1];
-        const balance = Object.values(lastRow)[index];
+        const balance = typeof lastRow?.balance === 'number' ? lastRow.balance : Object.values(lastRow)[index];
         return typeof balance === 'number' ? balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
       }
       let sum = 0;
@@ -1689,7 +1695,7 @@ function ViewLedgerModal({
       if (col === 'Balance') {
         if (data.length === 0) return '';
         const lastRow = data[data.length - 1];
-        const balance = Object.values(lastRow)[index];
+        const balance = typeof lastRow?.balance === 'number' ? lastRow.balance : Object.values(lastRow)[index];
         return typeof balance === 'number' ? balance.toFixed(2) : '';
       }
       let sum = 0;
@@ -1732,21 +1738,70 @@ function ViewLedgerModal({
   const exportToJPG = async () => {
     const element = document.getElementById('ledger-modal-content');
     if (!element) return;
+    setIsExporting(true);
+
+    const container = modalScrollRef.current;
+    const prevScrollTop = container ? container.scrollTop : 0;
+    const prevScrollLeft = container ? container.scrollLeft : 0;
+
+    // Scroll to top temporarily to eliminate coordinate offset issues on mobile viewports
+    if (container) {
+      container.scrollTop = 0;
+      container.scrollLeft = 0;
+    }
+
+    // Wait for state change so element dimensions expand to full unconstrained content
+    await new Promise(r => setTimeout(r, 250));
+
     try {
+      const table = element.querySelector('table');
+      const tableScrollWidth = table ? table.scrollWidth : 0;
+      const targetWidth = Math.max(element.scrollWidth, tableScrollWidth + 48, 950);
+      const targetHeight = Math.max(element.scrollHeight, element.offsetHeight);
+
+      let pixelRatio = 2;
+      if (targetHeight * 2 > 7000 || targetWidth * 2 > 7000) {
+        pixelRatio = Math.max(1, 7000 / Math.max(targetWidth, targetHeight));
+      }
+
       const dataUrl = await toJpeg(element, {
         backgroundColor: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
-        pixelRatio: 2,
+        pixelRatio,
+        width: targetWidth,
+        height: targetHeight,
         skipFonts: true,
-        fontEmbedCSS: ''
+        fontEmbedCSS: '',
+        style: {
+          width: `${targetWidth}px`,
+          height: `${targetHeight}px`,
+          maxHeight: 'none',
+          maxWidth: 'none',
+          overflow: 'visible',
+          transform: 'none',
+          margin: '0'
+        }
       });
-      const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = `ledger_${agent.name.toLowerCase().replace(/\s+/g, '_')}_report.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+
+      // Convert dataUrl to binary Blob to guarantee successful downloads on mobile browsers
+      const parts = dataUrl.split(',');
+      const byteString = atob(parts[1]);
+      const mimeString = parts[0].split(':')[1].split(';')[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      const blob = new Blob([ab], { type: mimeString });
+      saveAs(blob, `ledger_${agent.name.toLowerCase().replace(/\s+/g, '_')}_report.jpg`);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to export JPG:', err);
+      alert('Failed to export ledger JPG image. Please try again.');
+    } finally {
+      setIsExporting(false);
+      if (container) {
+        container.scrollTop = prevScrollTop;
+        container.scrollLeft = prevScrollLeft;
+      }
     }
   };
 
@@ -1773,7 +1828,7 @@ function ViewLedgerModal({
   });
 
   return (
-    <div className={cn("fixed inset-0 bg-slate-50 dark:bg-slate-950 z-50 overflow-y-auto", fontStyle, fontSize)}>
+    <div ref={modalScrollRef} className={cn("fixed inset-0 bg-slate-50 dark:bg-slate-950 z-50 overflow-y-auto", fontStyle, fontSize)}>
       <div className="max-w-6xl mx-auto p-4 md:p-6 min-h-screen flex flex-col">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <div>
@@ -1791,7 +1846,10 @@ function ViewLedgerModal({
             </Button>
             <Button variant="outline" className="text-xs py-1.5 h-9" onClick={exportToPDF}>Export PDF</Button>
             <Button variant="outline" className="text-xs py-1.5 h-9" onClick={exportToExcel}>Export Excel</Button>
-            <Button variant="outline" className="text-xs py-1.5 h-9" onClick={exportToJPG}>Export JPG</Button>
+            <Button variant="outline" className="text-xs py-1.5 h-9 gap-1.5" onClick={exportToJPG} disabled={isExporting}>
+              <RefreshCw size={13} className={cn(isExporting ? "animate-spin" : "hidden")} />
+              {isExporting ? 'Exporting...' : 'Export JPG'}
+            </Button>
             <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors ml-2">
               <Plus className="rotate-45 w-6 h-6 text-slate-600 dark:text-slate-400" />
             </button>
@@ -1805,7 +1863,15 @@ function ViewLedgerModal({
           </div>
         </Card>
         
-        <div id="ledger-modal-content" className="space-y-4 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 flex-1 flex flex-col">
+        <div 
+          id="ledger-modal-content" 
+          className={cn(
+            "space-y-4 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800",
+            isExporting 
+              ? "w-fit min-w-[950px] max-w-none flex-none overflow-visible shadow-none" 
+              : "flex-1 flex flex-col"
+          )}
+        >
           <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4 mb-2">
             <div>
               <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
@@ -1821,7 +1887,7 @@ function ViewLedgerModal({
             </div>
           </div>
 
-          <div className="overflow-x-auto flex-1">
+          <div className={cn(isExporting ? "overflow-visible" : "overflow-x-auto flex-1")}>
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                 <tr>
@@ -8168,12 +8234,19 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
         }
 
         // Get the full dimensions
-        const width = element.scrollWidth;
-        const height = element.scrollHeight;
+        const table = element.querySelector('table');
+        const tableScrollWidth = table ? table.scrollWidth : 0;
+        const width = Math.max(element.scrollWidth, tableScrollWidth + 48, 950);
+        const height = Math.max(element.scrollHeight, element.offsetHeight);
+
+        let pixelRatio = 2;
+        if (height * 2 > 7000 || width * 2 > 7000) {
+          pixelRatio = Math.max(1, 7000 / Math.max(width, height));
+        }
 
         const dataUrl = await toJpeg(element, {
           backgroundColor: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
-          pixelRatio: 2,
+          pixelRatio,
           width: width,
           height: height,
           skipFonts: true,
@@ -8181,7 +8254,9 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
           style: {
             overflow: 'visible',
             height: height + 'px',
-            width: width + 'px'
+            width: width + 'px',
+            maxHeight: 'none',
+            maxWidth: 'none'
           }
         });
 
@@ -8193,12 +8268,16 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
           element.parentElement?.style.removeProperty('display');
         }
 
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = `remitflow_${reportType}_report.jpg`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const parts = dataUrl.split(',');
+        const byteString = atob(parts[1]);
+        const mimeString = parts[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([ab], { type: mimeString });
+        saveAs(blob, `remitflow_${reportType}_report.jpg`);
       } catch (error) {
         console.error('Export failed:', error);
         alert('Failed to export JPG. Please try again.');
@@ -8633,7 +8712,7 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
                     (filterMYAgent === '' ? 'All MY Agents' : 'All BD Agents');
 
     return (
-      <div id={isExport ? "report-content-export" : "report-content"} className={cn("space-y-4 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800", isExport && "w-fit min-w-full")}>
+      <div id={isExport ? "report-content-export" : "report-content"} className={cn("space-y-4 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800", isExport && "w-fit min-w-[950px] max-w-none flex-none overflow-visible shadow-none")}>
         <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
           <div>
             <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">

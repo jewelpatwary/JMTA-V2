@@ -1028,19 +1028,58 @@ export function BankStatementView({
   };
 
   // Export JPG Snapshot
-  const handleExportJPG = () => {
-    if (!statementRef.current) return;
+  const handleExportJPG = async () => {
+    const el = statementRef.current;
+    if (!el) return;
     setIsExporting(true);
-    toJpeg(statementRef.current, { quality: 0.95, backgroundColor: '#ffffff', skipFonts: true, fontEmbedCSS: '' })
-      .then(dataUrl => {
-        saveAs(dataUrl, `${methodName}_Bank_Statement.jpg`);
-      })
-      .catch(err => {
-        console.error('Failed to export JPG', err);
-      })
-      .finally(() => {
-        setIsExporting(false);
+    await new Promise(r => setTimeout(r, 200));
+
+    try {
+      const table = el.querySelector('table');
+      const tableScrollWidth = table ? table.scrollWidth : 0;
+      const targetWidth = Math.max(el.scrollWidth, tableScrollWidth + 48, 950);
+      const targetHeight = Math.max(el.scrollHeight, el.offsetHeight);
+
+      let pixelRatio = 2;
+      if (targetHeight * 2 > 7000 || targetWidth * 2 > 7000) {
+        pixelRatio = Math.max(1, 7000 / Math.max(targetWidth, targetHeight));
+      }
+
+      const dataUrl = await toJpeg(el, {
+        quality: 0.95,
+        backgroundColor: '#ffffff',
+        skipFonts: true,
+        fontEmbedCSS: '',
+        pixelRatio,
+        width: targetWidth,
+        height: targetHeight,
+        style: {
+          width: `${targetWidth}px`,
+          height: `${targetHeight}px`,
+          maxHeight: 'none',
+          maxWidth: 'none',
+          overflow: 'visible',
+          transform: 'none',
+          margin: '0'
+        }
       });
+
+      const parts = dataUrl.split(',');
+      const byteString = atob(parts[1]);
+      const mimeString = parts[0].split(':')[1].split(';')[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      const blob = new Blob([ab], { type: mimeString });
+      saveAs(blob, `${methodName}_Bank_Statement.jpg`);
+    } catch (err) {
+      console.error('Failed to export JPG', err);
+      alert('Failed to export statement image. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Direct Print
@@ -1258,7 +1297,10 @@ export function BankStatementView({
       {/* Main Statement Canvas (For Screen & Export) */}
       <div 
         ref={statementRef}
-        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden p-6 space-y-6"
+        className={cn(
+          "bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6",
+          isExporting ? "w-fit min-w-[950px] max-w-none flex-none overflow-visible shadow-none" : "overflow-hidden"
+        )}
       >
         {/* Official Statement Letterhead */}
         <div className="border-b border-slate-200 dark:border-slate-800 pb-6">
