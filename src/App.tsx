@@ -155,16 +155,17 @@ const Button = ({
   );
 };
 
-const Input = ({ label, className, helpText, ...props }: { label?: string; helpText?: string } & React.InputHTMLAttributes<HTMLInputElement>) => (
+const Input = React.forwardRef<HTMLInputElement, { label?: string; helpText?: string } & React.InputHTMLAttributes<HTMLInputElement>>(({ label, className, helpText, ...props }, ref) => (
   <div className="space-y-1">
     {label && <label className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{label}</label>}
     <input 
+      ref={ref}
       {...props} 
       className={cn("w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 dark:focus:ring-white focus:border-transparent outline-none transition-all text-xs dark:text-white", className)}
     />
     {helpText && <p className="text-[10px] text-slate-500">{helpText}</p>}
   </div>
-);
+));
 
 const Select = ({ label, options, ...props }: { label?: string; options: { value: any; label: string }[] } & React.SelectHTMLAttributes<HTMLSelectElement>) => (
   <div className="space-y-1">
@@ -4430,6 +4431,8 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
 
   const [isMYAgentSelectOpen, setIsMYAgentSelectOpen] = useState(false);
 
+  const bdtInputRef = useRef<HTMLInputElement>(null);
+
   const handleOpenNewOrder = useCallback(() => {
     const savedDate = localStorage.getItem('last_order_date') || lastOrderDate;
     const savedBDAgent = localStorage.getItem('last_bd_agent_id') || '';
@@ -4542,6 +4545,9 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
             bd_agent_id: created.id.toString()
           }));
           localStorage.setItem('last_bd_agent_id', created.id.toString());
+          setTimeout(() => {
+            bdtInputRef.current?.focus();
+          }, 100);
         }
       }
       setShowCreateAgentModal(null);
@@ -5004,6 +5010,11 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
                          return { ...prev, my_agent_id: val, rate: newRate };
                       });
                       setIsMYAgentSelectOpen(false);
+                      if (val) {
+                        setTimeout(() => {
+                          bdtInputRef.current?.focus();
+                        }, 50);
+                      }
                     }}
                     required
                   />
@@ -5072,6 +5083,7 @@ function Orders({ token, onOrderAdded, initialFilters, onBulkUpload }: { token: 
                 </div>
                 <div className="w-full">
                   <Input 
+                    ref={bdtInputRef}
                     label="BDT Amount" 
                     type="number" 
                     value={formData.amount_bdt || ''} 
