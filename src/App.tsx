@@ -8160,9 +8160,13 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
       const data = [
         ['Total Orders', summary.order_count],
         ['Order Volume (RM)', formatCurrency(summary.total_myr_orders)],
+        ['Avg. Order Rate', summary.total_myr_orders > 0 ? ((summary.total_bdt_orders || 0) / summary.total_myr_orders).toFixed(2) : '0.00'],
         ['Total Conversion (RM)', formatCurrency(summary.total_myr_converted)],
+        ['Avg. Conversion Rate', summary.total_myr_converted > 0 ? (summary.total_bdt_converted / summary.total_myr_converted).toFixed(2) : '0.00'],
         ['Total Expenses (RM)', formatCurrency(summary.total_expenses)],
         ['Bank Charges (RM)', formatCurrency(summary.total_charges)],
+        ['Gross Profit (RM)', formatCurrency(summary.profitBreakdown?.grossProfit || 0)],
+        ['Total Profit (RM)', formatCurrency(summary.profitBreakdown?.netProfit || 0)],
         ['Avg Rate', summary.avg_rate?.toFixed(2)]
       ];
       autoTable(doc, {
@@ -8343,12 +8347,14 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
       const data = [{
         'Total Orders': summary.order_count,
         'Order Volume (RM)': summary.total_myr_orders.toFixed(2),
+        'Avg. Order Rate': summary.total_myr_orders > 0 ? ((summary.total_bdt_orders || 0) / summary.total_myr_orders).toFixed(2) : '0.00',
         'Total Conversion (RM)': summary.total_myr_converted.toFixed(2),
+        'Avg. Conversion Rate': summary.total_myr_converted > 0 ? (summary.total_bdt_converted / summary.total_myr_converted).toFixed(2) : '0.00',
         'Total Expenses (RM)': summary.total_expenses.toFixed(2),
         'Bank Charges (RM)': summary.total_charges.toFixed(2),
         'Banking Transaction Charges (RM)': (summary.profitBreakdown?.bankingTransactionChargesRm || 0).toFixed(2),
         'Gross Profit (RM)': (summary.profitBreakdown?.grossProfit || 0).toFixed(2),
-        'Net Profit (RM)': (summary.profitBreakdown?.netProfit || 0).toFixed(2),
+        'Total Profit (RM)': (summary.profitBreakdown?.netProfit || 0).toFixed(2),
         'Avg Rate': summary.avg_rate?.toFixed(2)
       }];
       ws = XLSX.utils.json_to_sheet(data);
@@ -8643,6 +8649,14 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
               <span className="text-xs font-bold text-slate-900 dark:text-white">{formatCurrency(summary.total_myr_orders || 0)}</span>
             </div>
             <div className="flex justify-between">
+              <span className="text-xs text-slate-600 dark:text-slate-400">Avg. Order Rate</span>
+              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                {summary.total_myr_orders > 0 
+                  ? ((summary.total_bdt_orders || 0) / summary.total_myr_orders).toFixed(2) 
+                  : '0.00'}
+              </span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-xs text-slate-600 dark:text-slate-400">Total Conversion</span>
               <span className="text-xs font-bold text-slate-900 dark:text-white">{formatCurrency(summary.total_myr_converted || 0)}</span>
             </div>
@@ -8653,6 +8667,17 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
                   ? (summary.total_bdt_converted / summary.total_myr_converted).toFixed(2) 
                   : '0.00'}
               </span>
+            </div>
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Total Profit</span>
+                <span className={cn("text-xs font-bold font-mono", (summary.profitBreakdown?.netProfit || 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+                  {formatCurrency(summary.profitBreakdown?.netProfit || 0)}
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                Gross Profit ({formatCurrency(summary.profitBreakdown?.grossProfit || 0)}) - Expenses ({formatCurrency(summary.profitBreakdown?.expenses || 0)}) - Bank Charges ({formatCurrency(summary.profitBreakdown?.bankCharges || 0)})
+              </div>
             </div>
           </div>
         </Card>

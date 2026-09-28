@@ -2057,6 +2057,7 @@ export const store = {
         summary: {
           order_count: filteredOrders.length,
           total_myr_orders: totalRmOrder,
+          total_bdt_orders: totalBdtOrder,
           total_myr_converted: totalRmConverted,
           total_bdt_converted: totalBdtConverted,
           avg_rate: avgConvertRate,
