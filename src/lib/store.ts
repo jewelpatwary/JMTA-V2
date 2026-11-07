@@ -2311,6 +2311,292 @@ export const store = {
       const myAgentIdNum = getValidAgentId(my_agent_id);
       const bdAgentIdNum = getValidAgentId(bd_agent_id);
 
+      const isMyAll = my_agent_id === 'all' || (Array.isArray(my_agent_id) && my_agent_id.includes('all'));
+      const isBdAll = bd_agent_id === 'all' || (Array.isArray(bd_agent_id) && bd_agent_id.includes('all'));
+
+      if (isMyAll) {
+        let initialBalance = myAgents.reduce((sum, a) => sum + (Number(a.initial_balance) || 0), 0);
+        let allTransactions: any[] = [];
+
+        myAgents.forEach(agent => {
+          const agentOrders = orders.filter(o => Number(o.my_agent_id) === Number(agent.id));
+          const agentPayments = myPayments.filter(p => Number(p.my_agent_id) === Number(agent.id));
+
+          agentOrders.forEach(o => {
+            if (start_date && o.date < start_date) return;
+            if (end_date && o.date > end_date) return;
+            allTransactions.push({
+              id: o.id,
+              date: o.date,
+              agent_name: agent.name,
+              desc: 'Order',
+              order_amount: Number(o.amount_bdt),
+              rate: Number(o.rate),
+              debit: Number(o.amount_myr),
+              credit: 0
+            });
+          });
+
+          agentPayments.forEach(p => {
+            if (start_date && p.date < start_date) return;
+            if (end_date && p.date > end_date) return;
+            allTransactions.push({
+              id: p.id,
+              date: p.date,
+              agent_name: agent.name,
+              desc: `Payment (${p.payment_method}${p.sub_method ? ' - ' + p.sub_method : ''})${p.note ? ' - ' + p.note : ''}`,
+              order_amount: '-',
+              rate: '-',
+              debit: 0,
+              credit: Number(p.amount_myr)
+            });
+          });
+        });
+
+        if (start_date) {
+          myAgents.forEach(agent => {
+            const agentOrders = orders.filter(o => Number(o.my_agent_id) === Number(agent.id) && o.date < start_date);
+            const agentPayments = myPayments.filter(p => Number(p.my_agent_id) === Number(agent.id) && p.date < start_date);
+            agentOrders.forEach(o => {
+              initialBalance -= Number(o.amount_myr);
+            });
+            agentPayments.forEach(p => {
+              initialBalance += Number(p.amount_myr);
+            });
+          });
+        }
+
+        allTransactions.sort((a, b) => {
+          const dateComparison = String(a.date || '').localeCompare(String(b.date || ''));
+          if (dateComparison !== 0) return dateComparison;
+          return a.id - b.id;
+        });
+
+        let balance = initialBalance;
+        const data: any[] = [];
+        
+        data.push({
+          date: start_date || 'Beginning',
+          agent_name: 'All MY Agents',
+          desc: start_date ? 'Opening Balance' : 'Initial Balance',
+          order_amount: '-',
+          rate: '-',
+          debit: 0,
+          credit: 0,
+          balance: balance
+        });
+
+        const grouped: { [date: string]: any[] } = {};
+        allTransactions.forEach(item => {
+          const d = item.date || 'Unknown';
+          if (!grouped[d]) grouped[d] = [];
+          grouped[d].push(item);
+        });
+
+        Object.keys(grouped).sort().forEach(date => {
+          let dayDebit = 0;
+          let dayCredit = 0;
+          let dayOrderAmount = 0;
+          grouped[date].forEach(item => {
+            dayDebit += Number(item.debit || 0);
+            dayCredit += Number(item.credit || 0);
+            if (item.order_amount && !isNaN(Number(item.order_amount))) {
+              dayOrderAmount += Number(item.order_amount);
+            }
+            balance = Math.round((balance + item.credit - item.debit) * 100) / 100;
+            data.push({
+              date: item.date,
+              agent_name: item.agent_name,
+              desc: item.desc,
+              order_amount: item.order_amount,
+              rate: item.rate,
+              debit: item.debit,
+              credit: item.credit,
+              balance: balance
+            });
+          });
+          data.push({
+            date: date,
+            agent_name: 'Daily Total',
+            desc: '--- Daily Total ---',
+            order_amount: dayOrderAmount > 0 ? Math.round(dayOrderAmount * 100) / 100 : '-',
+            rate: '-',
+            debit: Math.round(dayDebit * 100) / 100,
+            credit: Math.round(dayCredit * 100) / 100,
+            balance: balance
+          });
+        });
+
+        const columns = ['Date', 'Agent Name', 'Description', 'Order Amt (BDT)', 'Rate', 'Debit', 'Credit', 'Balance'];
+        return { data, columns };
+      }
+
+      if (isBdAll) {
+        let initialBalance = bdAgents.reduce((sum, a) => sum + (Number(a.initial_balance) || 0), 0);
+        let allTransactions: any[] = [];
+
+        bdAgents.forEach(agent => {
+          const agentOrders = orders.filter(o => Number(o.bd_agent_id) === Number(agent.id));
+          const agentPayments = bdPayments.filter(p => Number(p.bd_agent_id) === Number(agent.id));
+          const agentConversions = conversions.filter(c => Boolean(c.pay_to_bd_agent_id) && Number(c.pay_to_bd_agent_id) === Number(agent.id));
+
+          agentOrders.forEach(o => {
+            if (start_date && o.date < start_date) return;
+            if (end_date && o.date > end_date) return;
+            const amt = Number(o.amount_bdt) || 0;
+            const chg = Number(o.charge) || 0;
+            const totalDebit = amt + chg;
+            const desc = o.type === 'bank' 
+              ? `Bank Order${chg > 0 ? ` (incl. Charge: ${chg})` : ''}${o.remark ? ' - ' + o.remark : ''}` 
+              : `Order${o.type && o.type !== 'bkash' ? ` (${o.type})` : ''}${chg > 0 ? ` (incl. Charge: ${chg})` : ''}${o.remark ? ' - ' + o.remark : ''}`;
+            allTransactions.push({
+              id: o.id,
+              date: o.date,
+              agent_name: agent.name,
+              desc,
+              debit: totalDebit,
+              credit: 0
+            });
+          });
+
+          agentPayments.forEach(p => {
+            if (start_date && p.date < start_date) return;
+            if (end_date && p.date > end_date) return;
+            const amt = Number(p.amount_bdt) || 0;
+            const chg = Number(p.charge) || 0;
+            const isNegative = amt < 0;
+            const totalDebit = isNegative ? (Math.abs(amt) + chg) : chg;
+            const totalCredit = !isNegative ? amt : 0;
+            let desc = `Payment (${p.payment_method}${p.sub_method ? ' - ' + p.sub_method : ''})${p.note ? ' - ' + p.note : ''}`;
+            if (chg > 0 && !desc.includes('Charge')) {
+              desc += ` (incl. Charge: ${chg})`;
+            }
+            allTransactions.push({
+              id: p.id,
+              date: p.date,
+              agent_name: agent.name,
+              desc,
+              debit: totalDebit,
+              credit: totalCredit
+            });
+          });
+
+          agentConversions.forEach(c => {
+            if (start_date && c.date < start_date) return;
+            if (end_date && c.date > end_date) return;
+            const bdt = Number(c.amount_bdt) || 0;
+            const comm = c.commission_enabled ? (c.commission_amount ? Number(c.commission_amount) : bdt * 0.025) : 0;
+            const totalReceived = Number(c.total_bd_received) || (bdt + comm);
+            const actualComm = c.commission_enabled ? (totalReceived - bdt > 0 ? totalReceived - bdt : comm) : 0;
+            allTransactions.push({
+              id: c.id,
+              date: c.date,
+              agent_name: agent.name,
+              desc: `Conversion Remittance${c.note ? ' - ' + c.note : ''}`,
+              debit: 0,
+              credit: bdt
+            });
+            if (actualComm > 0) {
+              const pct = c.commission_amount && bdt > 0 
+                ? ((actualComm / bdt) * 100).toFixed(1).replace('.0', '') + '%' 
+                : '2.5%';
+              allTransactions.push({
+                id: Number(c.id) + 0.5,
+                date: c.date,
+                agent_name: agent.name,
+                desc: `Conversion Commission (${pct})`,
+                debit: 0,
+                credit: actualComm
+              });
+            }
+          });
+        });
+
+        if (start_date) {
+          bdAgents.forEach(agent => {
+            const agentOrders = orders.filter(o => Number(o.bd_agent_id) === Number(agent.id) && o.date < start_date);
+            const agentPayments = bdPayments.filter(p => Number(p.bd_agent_id) === Number(agent.id) && p.date < start_date);
+            const agentConversions = conversions.filter(c => Boolean(c.pay_to_bd_agent_id) && Number(c.pay_to_bd_agent_id) === Number(agent.id) && c.date < start_date);
+
+            agentOrders.forEach(o => {
+              initialBalance += Number(o.amount_bdt || 0) + Number(o.charge || 0);
+            });
+            agentPayments.forEach(p => {
+              const amt = Number(p.amount_bdt || 0);
+              const chg = Number(p.charge || 0);
+              if (amt < 0) {
+                initialBalance += Math.abs(amt) + chg;
+              } else {
+                initialBalance -= amt;
+                initialBalance += chg;
+              }
+            });
+            agentConversions.forEach(c => {
+              const bdt = Number(c.amount_bdt) || 0;
+              const comm = c.commission_enabled ? (c.commission_amount ? Number(c.commission_amount) : bdt * 0.025) : 0;
+              const totalReceived = Number(c.total_bd_received) || (bdt + comm);
+              const actualComm = c.commission_enabled ? (totalReceived - bdt > 0 ? totalReceived - bdt : comm) : 0;
+              initialBalance -= bdt;
+              if (actualComm > 0) initialBalance -= actualComm;
+            });
+          });
+        }
+
+        allTransactions.sort((a, b) => {
+          const dateComparison = String(a.date || '').localeCompare(String(b.date || ''));
+          if (dateComparison !== 0) return dateComparison;
+          return a.id - b.id;
+        });
+
+        let balance = initialBalance;
+        const data: any[] = [];
+
+        data.push({
+          date: start_date || 'Beginning',
+          agent_name: 'All BD Agents',
+          desc: start_date ? 'Opening Balance' : 'Initial Balance',
+          debit: 0,
+          credit: 0,
+          balance: balance
+        });
+
+        const grouped: { [date: string]: any[] } = {};
+        allTransactions.forEach(item => {
+          const d = item.date || 'Unknown';
+          if (!grouped[d]) grouped[d] = [];
+          grouped[d].push(item);
+        });
+
+        Object.keys(grouped).sort().forEach(date => {
+          let dayDebit = 0;
+          let dayCredit = 0;
+          grouped[date].forEach(item => {
+            dayDebit += Number(item.debit || 0);
+            dayCredit += Number(item.credit || 0);
+            balance = Math.round((balance + item.credit - item.debit) * 100) / 100;
+            data.push({
+              date: item.date,
+              agent_name: item.agent_name,
+              desc: item.desc,
+              debit: item.debit,
+              credit: item.credit,
+              balance: balance
+            });
+          });
+          data.push({
+            date: date,
+            agent_name: 'Daily Total',
+            desc: '--- Daily Total ---',
+            debit: Math.round(dayDebit * 100) / 100,
+            credit: Math.round(dayCredit * 100) / 100,
+            balance: balance
+          });
+        });
+
+        const columns = ['Date', 'Agent Name', 'Description', 'Debit', 'Credit', 'Balance'];
+        return { data, columns };
+      }
+
       if (myAgentIdNum) {
         isMyAgent = true;
         const agent = myAgents.find(a => Number(a.id) === myAgentIdNum);
@@ -2482,7 +2768,23 @@ export const store = {
           data.push(initialRow);
       }
 
+      const grouped: { [date: string]: any[] } = {};
       ledgerData.forEach(item => {
+        const d = item.date || 'Unknown';
+        if (!grouped[d]) grouped[d] = [];
+        grouped[d].push(item);
+      });
+
+      Object.keys(grouped).sort().forEach(date => {
+        let dayDebit = 0;
+        let dayCredit = 0;
+        let dayOrderAmount = 0;
+        grouped[date].forEach(item => {
+          dayDebit += Number(item.debit || 0);
+          dayCredit += Number(item.credit || 0);
+          if (item.order_amount && !isNaN(Number(item.order_amount))) {
+            dayOrderAmount += Number(item.order_amount);
+          }
           balance = Math.round((balance + item.credit - item.debit) * 100) / 100;
           const row: any = {
               date: item.date,
@@ -2499,6 +2801,20 @@ export const store = {
           row.balance = balance;
           
           data.push(row);
+        });
+
+        const dailyTotalRow: any = {
+          date: date,
+          desc: '--- Daily Total ---',
+        };
+        if (isMyAgent) {
+          dailyTotalRow.order_amount = dayOrderAmount > 0 ? Math.round(dayOrderAmount * 100) / 100 : '-';
+          dailyTotalRow.rate = '-';
+        }
+        dailyTotalRow.debit = Math.round(dayDebit * 100) / 100;
+        dailyTotalRow.credit = Math.round(dayCredit * 100) / 100;
+        dailyTotalRow.balance = balance;
+        data.push(dailyTotalRow);
       });
 
       const columns = isMyAgent 

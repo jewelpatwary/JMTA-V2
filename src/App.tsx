@@ -1898,30 +1898,33 @@ function ViewLedgerModal({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {data.length > 0 ? data.map((row: any, i: number) => (
-                  <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                    {Object.values(row).map((val: any, j: number) => {
-                      const colName = columns[j];
-                      return (
-                        <td key={j} className="px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 last:border-r-0 whitespace-nowrap">
-                          {typeof val === 'number' ? (
-                            <span className={cn(
-                              colName === 'Debit' ? "text-red-600 dark:text-red-400 font-medium" : "",
-                              colName === 'Credit' ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
-                              colName === 'Withdraw' ? "text-red-600 dark:text-red-400 font-medium" : "",
-                              colName.includes('Collection') ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
-                              colName === 'Balance' ? "font-bold text-slate-900 dark:text-white" : ""
-                            )}>
-                              {val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          ) : (
-                            colName.toLowerCase().includes('date') ? formatDate(val as string) : val
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                )) : (
+                {data.length > 0 ? data.map((row: any, i: number) => {
+                  const isDailyTotal = row.desc === '--- Daily Total ---' || row.agent_name === 'Daily Total';
+                  return (
+                    <tr key={i} className={cn("hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors", isDailyTotal && "bg-slate-100 dark:bg-slate-800/60 font-bold")}>
+                      {Object.values(row).map((val: any, j: number) => {
+                        const colName = columns[j];
+                        return (
+                          <td key={j} className={cn("px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 last:border-r-0 whitespace-nowrap", isDailyTotal && "font-bold text-slate-900 dark:text-white border-b-2 border-double border-slate-900 dark:border-white underline decoration-double underline-offset-4")}>
+                            {typeof val === 'number' ? (
+                              <span className={cn(
+                                colName === 'Debit' ? "text-red-600 dark:text-red-400 font-medium" : "",
+                                colName === 'Credit' ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
+                                colName === 'Withdraw' ? "text-red-600 dark:text-red-400 font-medium" : "",
+                                colName.includes('Collection') ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
+                                colName === 'Balance' ? "font-bold text-slate-900 dark:text-white" : ""
+                              )}>
+                                {val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            ) : (
+                              colName.toLowerCase().includes('date') && val && val !== '--- Daily Total ---' && !val.includes('Beginning') && !val.includes('Initial') ? formatDate(val as string) : val
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                }) : (
                   <tr>
                     <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400 text-xs italic">No transactions found for this period.</td>
                   </tr>
@@ -8776,31 +8779,34 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {currentData.length > 0 ? currentData.map((row: any, i: number) => (
-                  <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                    {Object.values(row).map((val: any, j: number) => {
-                      const colName = columns[j];
-                      return (
-                        <td key={j} className="px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 last:border-r-0 whitespace-nowrap">
-                          {typeof val === 'number' ? (
-                            <span className={cn(
-                              reportType === 'daily_financial' && j === 6 ? (val >= 0 ? "text-emerald-600 font-bold" : "text-red-600 font-bold") : "",
-                              (reportType === 'ledger' || reportType === 'collection') && colName === 'Debit' ? "text-red-600 dark:text-red-400 font-medium" : "",
-                              (reportType === 'ledger' || reportType === 'collection') && colName === 'Credit' ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
-                              (reportType === 'ledger' || reportType === 'collection') && colName === 'Withdraw' ? "text-red-600 dark:text-red-400 font-medium" : "",
-                              (reportType === 'ledger' || reportType === 'collection') && colName.includes('Collection') ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
-                              (reportType === 'ledger' || reportType === 'collection') && colName === 'Balance' ? "font-bold text-slate-900 dark:text-white" : ""
-                            )}>
-                              {val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          ) : (
-                            colName.toLowerCase().includes('date') ? formatDate(val as string) : val
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                )) : (
+                {currentData.length > 0 ? currentData.map((row: any, i: number) => {
+                  const isDailyTotal = row.desc === '--- Daily Total ---' || row.agent_name === 'Daily Total';
+                  return (
+                    <tr key={i} className={cn("hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors", isDailyTotal && "bg-slate-100 dark:bg-slate-800/60 font-bold")}>
+                      {Object.values(row).map((val: any, j: number) => {
+                        const colName = columns[j];
+                        return (
+                          <td key={j} className={cn("px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 last:border-r-0 whitespace-nowrap", isDailyTotal && "font-bold text-slate-900 dark:text-white border-b-2 border-double border-slate-900 dark:border-white underline decoration-double underline-offset-4")}>
+                            {typeof val === 'number' ? (
+                              <span className={cn(
+                                reportType === 'daily_financial' && j === 6 ? (val >= 0 ? "text-emerald-600 font-bold" : "text-red-600 font-bold") : "",
+                                (reportType === 'ledger' || reportType === 'collection') && colName === 'Debit' ? "text-red-600 dark:text-red-400 font-medium" : "",
+                                (reportType === 'ledger' || reportType === 'collection') && colName === 'Credit' ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
+                                (reportType === 'ledger' || reportType === 'collection') && colName === 'Withdraw' ? "text-red-600 dark:text-red-400 font-medium" : "",
+                                (reportType === 'ledger' || reportType === 'collection') && colName.includes('Collection') ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
+                                (reportType === 'ledger' || reportType === 'collection') && colName === 'Balance' ? "font-bold text-slate-900 dark:text-white" : ""
+                              )}>
+                                {val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            ) : (
+                              colName.toLowerCase().includes('date') && val && val !== '--- Daily Total ---' && !val.includes('Beginning') && !val.includes('Initial') ? formatDate(val as string) : val
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                }) : (
                   <tr>
                     <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-500 dark:text-slate-400 text-xs italic">No data found for this report period.</td>
                   </tr>
