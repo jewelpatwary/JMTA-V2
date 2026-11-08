@@ -1653,6 +1653,7 @@ function ViewLedgerModal({
       let sum = 0;
       let hasNumeric = false;
       data.forEach((row: any) => {
+        if (row.desc === '--- Daily Total ---' || row.agent_name === 'Daily Total') return;
         const val = Object.values(row)[index];
         if (typeof val === 'number') {
           sum += val;
@@ -1674,14 +1675,55 @@ function ViewLedgerModal({
     doc.text(`Juel Money Transfer Apps (${startDate ? formatDate(startDate) : 'Beginning'} — ${endDate ? formatDate(endDate) : 'Present'})`, 14, 28);
     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 34);
 
+
+
     autoTable(doc, {
       startY: 42,
       head: [columns],
       body: bodyData,
       foot: [columnTotals],
+      showFoot: 'lastPage',
       theme: 'striped',
       headStyles: { fillColor: [15, 23, 42] },
-      footStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontStyle: 'bold' }
+      footStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontStyle: 'bold' },
+      didParseCell: (data) => {
+        if (data.section === 'body') {
+          const rowData = reportData.data[data.row.index];
+          const rawRow = data.row.raw;
+          const isDailyTotal = (rowData && (rowData.desc === '--- Daily Total ---' || rowData.agent_name === 'Daily Total')) ||
+            (Array.isArray(rawRow) && rawRow.some(val => String(val).includes('Daily Total')));
+          if (isDailyTotal) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.textColor = [15, 23, 42];
+            data.cell.styles.fillColor = [241, 245, 249];
+          }
+        }
+        if (data.section === 'foot') {
+          data.cell.styles.fillColor = [248, 250, 252];
+          data.cell.styles.textColor = [15, 23, 42];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      },
+      didDrawCell: (hookData) => {
+        if (hookData.section === 'body') {
+          const rowData = reportData.data && reportData.data[hookData.row.index];
+          const rawRow = hookData.row.raw;
+          const isDailyTotal = (rowData && (rowData.desc === '--- Daily Total ---' || rowData.agent_name === 'Daily Total')) ||
+            (Array.isArray(rawRow) && rawRow.some(val => String(val).includes('Daily Total')));
+          if (isDailyTotal) {
+            const { x, y, width, height } = hookData.cell;
+            const pdfDoc = hookData.doc;
+            pdfDoc.saveGraphicsState();
+            pdfDoc.setDrawColor(15, 23, 42); // slate-900
+            pdfDoc.setLineWidth(0.35); // line thickness in mm
+            // Upper line of double underline
+            pdfDoc.line(x, y + height - 1.5, x + width, y + height - 1.5);
+            // Lower line of double underline
+            pdfDoc.line(x, y + height - 0.6, x + width, y + height - 0.6);
+            pdfDoc.restoreGraphicsState();
+          }
+        }
+      }
     });
 
     doc.save(`ledger_${agent.name.toLowerCase().replace(/\s+/g, '_')}_report.pdf`);
@@ -1702,6 +1744,7 @@ function ViewLedgerModal({
       let sum = 0;
       let hasNumeric = false;
       data.forEach((row: any) => {
+        if (row.desc === '--- Daily Total ---' || row.agent_name === 'Daily Total') return;
         const val = Object.values(row)[index];
         if (typeof val === 'number') {
           sum += val;
@@ -1729,6 +1772,41 @@ function ViewLedgerModal({
     }
 
     const ws = XLSX.utils.json_to_sheet(exportData);
+
+    // Style bold daily total rows and total row in Excel
+    if (exportData.length > 0) {
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let r = 0; r < exportData.length; r++) {
+        const rowObj = exportData[r];
+        const isDailyTotal = rowObj && (
+          rowObj['Description'] === '--- Daily Total ---' ||
+          rowObj['Agent Name'] === 'Daily Total' ||
+          Object.values(rowObj).some(v => String(v).includes('Daily Total'))
+        );
+        const isTotalRow = r === exportData.length - 1 && data.length > 0;
+        if (isDailyTotal || isTotalRow) {
+          for (let col = 0; col <= range.e.c; col++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: r + 1, c: col });
+            if (ws[cellAddress]) {
+              if (isTotalRow) {
+                ws[cellAddress].s = {
+                  font: { bold: true, color: { rgb: "FFFFFF" } },
+                  fill: { fgColor: { rgb: "0F172A" }, patternType: "solid" },
+                  alignment: { vertical: "center", horizontal: "left" }
+                };
+              } else {
+                ws[cellAddress].s = {
+                  font: { bold: true, color: { rgb: "0F172A" } },
+                  fill: { fgColor: { rgb: "F1F5F9" }, patternType: "solid" },
+                  alignment: { vertical: "center", horizontal: "left" }
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Ledger");
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -1818,6 +1896,7 @@ function ViewLedgerModal({
     let sum = 0;
     let hasNumeric = false;
     data.forEach((row: any) => {
+      if (row.desc === '--- Daily Total ---' || row.agent_name === 'Daily Total') return;
       const rowValues = Object.values(row);
       const val = rowValues[index];
       if (typeof val === 'number') {
@@ -1901,24 +1980,48 @@ function ViewLedgerModal({
                 {data.length > 0 ? data.map((row: any, i: number) => {
                   const isDailyTotal = row.desc === '--- Daily Total ---' || row.agent_name === 'Daily Total';
                   return (
-                    <tr key={i} className={cn("hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors", isDailyTotal && "bg-slate-100 dark:bg-slate-800/60 font-bold")}>
+                    <tr 
+                      key={i} 
+                      className={cn(
+                        "transition-colors", 
+                        isDailyTotal ? "bg-slate-100 dark:bg-slate-800/80 font-bold" : "hover:bg-slate-50/50 dark:hover:bg-slate-800/30"
+                      )}
+                    >
                       {Object.values(row).map((val: any, j: number) => {
                         const colName = columns[j];
                         return (
-                          <td key={j} className={cn("px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 last:border-r-0 whitespace-nowrap", isDailyTotal && "font-bold text-slate-900 dark:text-white border-b-2 border-double border-slate-900 dark:border-white underline decoration-double underline-offset-4")}>
-                            {typeof val === 'number' ? (
-                              <span className={cn(
-                                colName === 'Debit' ? "text-red-600 dark:text-red-400 font-medium" : "",
-                                colName === 'Credit' ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
-                                colName === 'Withdraw' ? "text-red-600 dark:text-red-400 font-medium" : "",
-                                colName.includes('Collection') ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
-                                colName === 'Balance' ? "font-bold text-slate-900 dark:text-white" : ""
-                              )}>
-                                {val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </span>
-                            ) : (
-                              colName.toLowerCase().includes('date') && val && val !== '--- Daily Total ---' && !val.includes('Beginning') && !val.includes('Initial') ? formatDate(val as string) : val
+                          <td 
+                            key={j} 
+                            className={cn(
+                              "px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 last:border-r-0 whitespace-nowrap", 
+                              isDailyTotal && "!font-bold text-slate-900 dark:text-white"
                             )}
+                            style={isDailyTotal ? {
+                              borderBottom: '3px double currentColor',
+                              fontWeight: 'bold'
+                            } : undefined}
+                          >
+                            <span 
+                              className={cn(
+                                "inline-block",
+                                isDailyTotal ? "!font-bold text-slate-900 dark:text-white" : "",
+                                !isDailyTotal && colName === 'Debit' ? "text-red-600 dark:text-red-400 font-medium" : "",
+                                !isDailyTotal && colName === 'Credit' ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
+                                !isDailyTotal && colName === 'Withdraw' ? "text-red-600 dark:text-red-400 font-medium" : "",
+                                !isDailyTotal && colName.includes('Collection') ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
+                                !isDailyTotal && colName === 'Balance' ? "font-bold text-slate-900 dark:text-white" : ""
+                              )}
+                              style={isDailyTotal ? {
+                                borderBottom: '3px double currentColor',
+                                paddingBottom: '1px',
+                                fontWeight: 'bold'
+                              } : undefined}
+                            >
+                              {typeof val === 'number' 
+                                ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : (colName.toLowerCase().includes('date') && val && val !== '--- Daily Total ---' && !val.includes('Beginning') && !val.includes('Initial') ? formatDate(val as string) : val)
+                              }
+                            </span>
                           </td>
                         );
                       })}
@@ -7740,6 +7843,7 @@ function CalculationPage() {
       head: [['SL', 'BD TK', 'Rate', 'RM', 'Payment', 'Last Due', 'Balance']],
       body: tableData,
       foot: [totalRow],
+      showFoot: 'lastPage',
       theme: 'striped',
       headStyles: { fillColor: [15, 23, 42] },
       footStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontStyle: 'bold' }
@@ -8153,6 +8257,7 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
         head: [['Month', 'Order Volume (RM)', 'Gross Profit (RM)', 'Expenses (RM)', 'Bank Charges (RM)', 'Net Profit (RM)']],
         body: bodyData,
         foot: [columnTotals],
+        showFoot: 'lastPage',
         theme: 'striped',
         headStyles: { fillColor: [15, 23, 42] },
         footStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontStyle: 'bold' }
@@ -8196,6 +8301,7 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
         let sum = 0;
         let hasNumeric = false;
         data.forEach((row: any) => {
+          if (row.desc === '--- Daily Total ---' || row.agent_name === 'Daily Total') return;
           const val = Object.values(row)[index];
           if (typeof val === 'number') {
             sum += val;
@@ -8214,14 +8320,46 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
         head: [columns],
         body: bodyData,
         foot: [columnTotals],
+        showFoot: 'lastPage',
         theme: 'striped',
         headStyles: { fillColor: [15, 23, 42] },
         footStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontStyle: 'bold' },
         didParseCell: (data) => {
+          if (data.section === 'body') {
+            const rowData = reportData.data[data.row.index];
+            const rawRow = data.row.raw;
+            const isDailyTotal = (rowData && (rowData.desc === '--- Daily Total ---' || rowData.agent_name === 'Daily Total')) ||
+              (Array.isArray(rawRow) && rawRow.some(val => String(val).includes('Daily Total')));
+            if (isDailyTotal) {
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.textColor = [15, 23, 42];
+              data.cell.styles.fillColor = [241, 245, 249];
+            }
+          }
           if (data.section === 'foot') {
             data.cell.styles.fillColor = [248, 250, 252];
             data.cell.styles.textColor = [15, 23, 42];
             data.cell.styles.fontStyle = 'bold';
+          }
+        },
+        didDrawCell: (hookData) => {
+          if (hookData.section === 'body') {
+            const rowData = reportData.data && reportData.data[hookData.row.index];
+            const rawRow = hookData.row.raw;
+            const isDailyTotal = (rowData && (rowData.desc === '--- Daily Total ---' || rowData.agent_name === 'Daily Total')) ||
+              (Array.isArray(rawRow) && rawRow.some(val => String(val).includes('Daily Total')));
+            if (isDailyTotal) {
+              const { x, y, width, height } = hookData.cell;
+              const pdfDoc = hookData.doc;
+              pdfDoc.saveGraphicsState();
+              pdfDoc.setDrawColor(15, 23, 42); // slate-900
+              pdfDoc.setLineWidth(0.35); // line thickness in mm
+              // Upper line of double underline
+              pdfDoc.line(x, y + height - 1.5, x + width, y + height - 1.5);
+              // Lower line of double underline
+              pdfDoc.line(x, y + height - 0.6, x + width, y + height - 0.6);
+              pdfDoc.restoreGraphicsState();
+            }
           }
         }
       });
@@ -8378,6 +8516,7 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
         let sum = 0;
         let hasNumeric = false;
         data.forEach((row: any) => {
+          if (row.desc === '--- Daily Total ---' || row.agent_name === 'Daily Total') return;
           const val = Object.values(row)[index];
           if (typeof val === 'number') {
             sum += val;
@@ -8406,18 +8545,36 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
 
       ws = XLSX.utils.json_to_sheet(exportData);
 
-      // Apply styling to the total row in Excel
-      if (data.length > 0) {
+      // Apply styling to daily total rows and total row in Excel
+      if (exportData.length > 0) {
         const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-        const lastRowIndex = range.e.r;
-        for (let col = 0; col <= range.e.c; col++) {
-          const cellAddress = XLSX.utils.encode_cell({ r: lastRowIndex, c: col });
-          if (ws[cellAddress]) {
-            ws[cellAddress].s = {
-              font: { bold: true, color: { rgb: "FFFFFF" } },
-              fill: { fgColor: { rgb: "0F172A" }, patternType: "solid" },
-              alignment: { vertical: "center", horizontal: "left" }
-            };
+        for (let r = 0; r < exportData.length; r++) {
+          const rowObj = exportData[r];
+          const isDailyTotal = rowObj && (
+            rowObj['Description'] === '--- Daily Total ---' ||
+            rowObj['Agent Name'] === 'Daily Total' ||
+            Object.values(rowObj).some(v => String(v).includes('Daily Total'))
+          );
+          const isTotalRow = r === exportData.length - 1 && data.length > 0;
+          if (isDailyTotal || isTotalRow) {
+            for (let col = 0; col <= range.e.c; col++) {
+              const cellAddress = XLSX.utils.encode_cell({ r: r + 1, c: col });
+              if (ws[cellAddress]) {
+                if (isTotalRow) {
+                  ws[cellAddress].s = {
+                    font: { bold: true, color: { rgb: "FFFFFF" } },
+                    fill: { fgColor: { rgb: "0F172A" }, patternType: "solid" },
+                    alignment: { vertical: "center", horizontal: "left" }
+                  };
+                } else {
+                  ws[cellAddress].s = {
+                    font: { bold: true, color: { rgb: "0F172A" } },
+                    fill: { fgColor: { rgb: "F1F5F9" }, patternType: "solid" },
+                    alignment: { vertical: "center", horizontal: "left" }
+                  };
+                }
+              }
+            }
           }
         }
       }
@@ -8731,6 +8888,7 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
       let hasNumeric = false;
       
       data.forEach((row: any) => {
+        if (row.desc === '--- Daily Total ---' || row.agent_name === 'Daily Total') return;
         const rowValues = Object.values(row);
         const val = rowValues[index];
         if (typeof val === 'number') {
@@ -8782,25 +8940,49 @@ function Reports({ token, stats, initialFilters }: { token: string; stats: any; 
                 {currentData.length > 0 ? currentData.map((row: any, i: number) => {
                   const isDailyTotal = row.desc === '--- Daily Total ---' || row.agent_name === 'Daily Total';
                   return (
-                    <tr key={i} className={cn("hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors", isDailyTotal && "bg-slate-100 dark:bg-slate-800/60 font-bold")}>
+                    <tr 
+                      key={i} 
+                      className={cn(
+                        "transition-colors", 
+                        isDailyTotal ? "bg-slate-100 dark:bg-slate-800/80 font-bold" : "hover:bg-slate-50/50 dark:hover:bg-slate-800/30"
+                      )}
+                    >
                       {Object.values(row).map((val: any, j: number) => {
                         const colName = columns[j];
                         return (
-                          <td key={j} className={cn("px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 last:border-r-0 whitespace-nowrap", isDailyTotal && "font-bold text-slate-900 dark:text-white border-b-2 border-double border-slate-900 dark:border-white underline decoration-double underline-offset-4")}>
-                            {typeof val === 'number' ? (
-                              <span className={cn(
-                                reportType === 'daily_financial' && j === 6 ? (val >= 0 ? "text-emerald-600 font-bold" : "text-red-600 font-bold") : "",
-                                (reportType === 'ledger' || reportType === 'collection') && colName === 'Debit' ? "text-red-600 dark:text-red-400 font-medium" : "",
-                                (reportType === 'ledger' || reportType === 'collection') && colName === 'Credit' ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
-                                (reportType === 'ledger' || reportType === 'collection') && colName === 'Withdraw' ? "text-red-600 dark:text-red-400 font-medium" : "",
-                                (reportType === 'ledger' || reportType === 'collection') && colName.includes('Collection') ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
-                                (reportType === 'ledger' || reportType === 'collection') && colName === 'Balance' ? "font-bold text-slate-900 dark:text-white" : ""
-                              )}>
-                                {val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </span>
-                            ) : (
-                              colName.toLowerCase().includes('date') && val && val !== '--- Daily Total ---' && !val.includes('Beginning') && !val.includes('Initial') ? formatDate(val as string) : val
+                          <td 
+                            key={j} 
+                            className={cn(
+                              "px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 last:border-r-0 whitespace-nowrap", 
+                              isDailyTotal && "!font-bold text-slate-900 dark:text-white"
                             )}
+                            style={isDailyTotal ? {
+                              borderBottom: '3px double currentColor',
+                              fontWeight: 'bold'
+                            } : undefined}
+                          >
+                            <span 
+                              className={cn(
+                                "inline-block",
+                                isDailyTotal ? "!font-bold text-slate-900 dark:text-white" : "",
+                                !isDailyTotal && reportType === 'daily_financial' && j === 6 ? (val >= 0 ? "text-emerald-600 font-bold" : "text-red-600 font-bold") : "",
+                                !isDailyTotal && (reportType === 'ledger' || reportType === 'collection') && colName === 'Debit' ? "text-red-600 dark:text-red-400 font-medium" : "",
+                                !isDailyTotal && (reportType === 'ledger' || reportType === 'collection') && colName === 'Credit' ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
+                                !isDailyTotal && (reportType === 'ledger' || reportType === 'collection') && colName === 'Withdraw' ? "text-red-600 dark:text-red-400 font-medium" : "",
+                                !isDailyTotal && (reportType === 'ledger' || reportType === 'collection') && colName.includes('Collection') ? "text-emerald-600 dark:text-emerald-400 font-medium" : "",
+                                !isDailyTotal && (reportType === 'ledger' || reportType === 'collection') && colName === 'Balance' ? "font-bold text-slate-900 dark:text-white" : ""
+                              )}
+                              style={isDailyTotal ? {
+                                borderBottom: '3px double currentColor',
+                                paddingBottom: '1px',
+                                fontWeight: 'bold'
+                              } : undefined}
+                            >
+                              {typeof val === 'number' 
+                                ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : (colName.toLowerCase().includes('date') && val && val !== '--- Daily Total ---' && !val.includes('Beginning') && !val.includes('Initial') ? formatDate(val as string) : val)
+                              }
+                            </span>
                           </td>
                         );
                       })}

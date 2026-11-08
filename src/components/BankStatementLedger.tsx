@@ -941,6 +941,7 @@ export function BankStatementView({
       head: [tableColumns],
       body: tableRows,
       foot: [totalRow],
+      showFoot: 'lastPage',
       theme: 'grid',
       styles: { fontSize: 7.5, cellPadding: 2.5, font: 'helvetica' },
       headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
